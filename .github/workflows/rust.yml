@@ -20,59 +20,27 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.10'
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
 
-      - name: Install Dependencies
-        run: |
-          python -m pip install --upgrade pip
-          if (Test-Path requirements.txt) { pip install -r requirements.txt }
-          if (Test-Path setup.py) { pip install . }
-          pip install pyinstaller
+      - name: Cache Cargo Build
+        uses: Swatinem/rust-cache@v2
 
-      - name: Build Executable with PyInstaller
-        run: |
-          $candidates = @(
-            "main.py",
-            "easyeda2altium.py",
-            "app.py",
-            "cli.py",
-            "run.py",
-            "gui.py",
-            "src/main.py",
-            "src/easyeda2altium.py"
-          )
-          $entry = $candidates | Where-Object { Test-Path $_ } | Select-Object -First 1
-
-          if (-not $entry) {
-            $pyFiles = Get-ChildItem -Recurse -Filter *.py | Where-Object {
-              $_.FullName -notmatch '\\(\.git|venv|\.venv|build|dist|__pycache__)\\'
-            }
-            if ($pyFiles.Count -eq 1) {
-              $entry = $pyFiles[0].FullName
-            } else {
-              Write-Host "Could not auto-detect a single Python entry point. Files in repository:"
-              Get-ChildItem -Recurse -Depth 2 | Select-Object -ExpandProperty FullName
-              exit 1
-            }
-          }
-
-          Write-Host "Building executable from: $entry"
-          pyinstaller --noconfirm --onefile --console --name easyeda2altium "$entry"
+      - name: Build Release Executable
+        run: cargo build --release --locked
 
       - name: Upload Workflow Artifact
         uses: actions/upload-artifact@v4
         with:
           name: easyeda2altium-windows-executable
-          path: dist/*.exe
+          path: target/release/*.exe
 
       - name: Upload Executable to GitHub Release
         if: github.event_name == 'release' || startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v3
         with:
-          files: dist/*.exe
+          files: target/release/*.exe
           generate_release_notes: true
+          fail_on_unmatched_files: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
