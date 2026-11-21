@@ -1,27 +1,53 @@
-name: Rust
+name: Build Windows Executable
 
 on:
   push:
-    branches: [ "main" ]
+    branches: [ main, master ]
+    tags: [ 'v*' ]
   pull_request:
-    branches: [ "main" ]
+    branches: [ main, master ]
+  release:
+    types: [ published ]
 
-env:
-  CARGO_TERM_COLOR: always
+permissions:
+  contents: write
 
 jobs:
   build:
-
     runs-on: windows-latest
 
     steps:
-    - uses: actions/checkout@v4
-    - name: Build
-      run: cargo build --verbose
-    - name: Run tests
-      run: cargo test --verbose
-    - name: Upload artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: build-output
-        path: bin/Release/net6.0/win-x64/publish/
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+          cache: 'pip'
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          if (Test-Path requirements.txt) { pip install -r requirements.txt }
+          pip install pyinstaller
+
+      - name: Build Executable with PyInstaller
+        run: |
+          # Replace 'main.py' with the repository's actual entry point script if different
+          pyinstaller --noconfirm --onefile --console --name easyeda2altium main.py
+
+      - name: Upload Workflow Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: easyeda2altium-windows-executable
+          path: dist/*.exe
+
+      - name: Upload Executable to GitHub Release
+        if: github.event_name == 'release' || startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v3
+        with:
+          files: dist/*.exe
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
