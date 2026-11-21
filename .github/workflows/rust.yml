@@ -34,8 +34,33 @@ jobs:
 
       - name: Build Executable with PyInstaller
         run: |
-          # Replace 'main.py' with the repository's actual entry point script if different
-          pyinstaller --noconfirm --onefile --console --name easyeda2altium main.py
+          $candidates = @(
+            "main.py",
+            "easyeda2altium.py",
+            "app.py",
+            "cli.py",
+            "run.py",
+            "gui.py",
+            "src/main.py",
+            "src/easyeda2altium.py"
+          )
+          $entry = $candidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+
+          if (-not $entry) {
+            $pyFiles = Get-ChildItem -Recurse -Filter *.py | Where-Object {
+              $_.FullName -notmatch '\\(\.git|venv|\.venv|build|dist|__pycache__)\\'
+            }
+            if ($pyFiles.Count -eq 1) {
+              $entry = $pyFiles[0].FullName
+            } else {
+              Write-Host "Could not auto-detect a single Python entry point. Files in repository:"
+              Get-ChildItem -Recurse -Depth 2 | Select-Object -ExpandProperty FullName
+              exit 1
+            }
+          }
+
+          Write-Host "Building executable from: $entry"
+          pyinstaller --noconfirm --onefile --console --name easyeda2altium "$entry"
 
       - name: Upload Workflow Artifact
         uses: actions/upload-artifact@v4
